@@ -9,7 +9,7 @@ pdfplumber==0.10.3
 PyMuPDF==1.26.7
 
 # OpenAI API client
-openai==1.54.0
+openai>=1.12.0
 
 # Environment variables management
 python-dotenv==1.0.0
