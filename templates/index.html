@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI PDF Analyzer - Summary & Questions Generator</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header Section -->
+        <header>
+            <h1>📚 AI PDF Analyzer</h1>
+            <p class="subtitle">Upload a PDF to generate summaries or study questions</p>
+        </header>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <div class="upload-box">
+                <div class="upload-icon">📄</div>
+                <input type="file" id="pdfFile" accept=".pdf" class="file-input">
+                <label for="pdfFile" class="file-label">
+                    <span id="fileName">Choose a PDF file (Max 70 MB)</span>
+                </label>
+            </div>
+
+            <!-- Options Section -->
+            <div class="options-section">
+                <div class="option-group">
+                    <label for="languageSelect" class="option-label">
+                        🌍 Output Language:
+                    </label>
+                    <select id="languageSelect" class="option-select">
+                        <option value="Azerbaijani">🇦🇿 Azərbaycan dili</option>
+                        <option value="English" selected>🇬🇧 English</option>
+                        <option value="Turkish">🇹🇷 Türkçe</option>
+                        <option value="Russian">🇷🇺 Русский</option>
+                        <option value="German">🇩🇪 Deutsch</option>
+                        <option value="French">🇫🇷 Français</option>
+                        <option value="Spanish">🇪🇸 Español</option>
+                        <option value="Arabic">🇸🇦 العربية</option>
+                    </select>
+                </div>
+
+                <div class="option-group">
+                    <label for="numQuestions" class="option-label">
+                        🔢 Number of Questions:
+                    </label>
+                    <input 
+                        type="number" 
+                        id="numQuestions" 
+                        class="option-input" 
+                        value="10" 
+                        min="1" 
+                        max="50"
+                        placeholder="Enter number (1-50)"
+                    >
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="button-group">
+                <button id="testBtn" class="btn btn-test" disabled>
+                    <span class="btn-icon">🔍</span> Test Extract
+                </button>
+                <button id="summaryBtn" class="btn btn-primary" disabled>
+                    <span class="btn-icon">📝</span> Generate Summary
+                </button>
+                <button id="questionsBtn" class="btn btn-secondary" disabled>
+                    <span class="btn-icon">❓</span> Generate Questions
+                </button>
+            </div>
+        </div>
+
+        <!-- Loading Spinner -->
+        <div id="loading" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Processing your PDF with AI...</p>
+        </div>
+
+        <!-- Results Section -->
+        <div id="results" class="results hidden">
+            <div class="results-header">
+                <h2 id="resultsTitle">Results</h2>
+                <button id="closeResults" class="close-btn">✕</button>
+            </div>
+            <div id="resultsContent" class="results-content"></div>
+        </div>
+
+        <!-- Error Message -->
+        <div id="error" class="error hidden">
+            <div class="error-icon">⚠️</div>
+            <p id="errorMessage"></p>
+            <button id="closeError" class="close-btn-small">Dismiss</button>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <p>Powered by OpenAI GPT | Built with FastAPI</p>
+    </footer>
+
+    <script>
+        // Get DOM elements
+        const fileInput = document.getElementById('pdfFile');
+        const fileName = document.getElementById('fileName');
+        const testBtn = document.getElementById('testBtn');
+        const summaryBtn = document.getElementById('summaryBtn');
+        const questionsBtn = document.getElementById('questionsBtn');
+        const languageSelect = document.getElementById('languageSelect');
+        const numQuestionsInput = document.getElementById('numQuestions');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const resultsTitle = document.getElementById('resultsTitle');
+        const resultsContent = document.getElementById('resultsContent');
+        const errorDiv = document.getElementById('error');
+        const errorMessage = document.getElementById('errorMessage');
+        const closeResults = document.getElementById('closeResults');
+        const closeError = document.getElementById('closeError');
+
+        let selectedFile = null;
+
+        // Handle file selection
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                // Check file size (70 MB limit)
+                const maxSize = 70 * 1024 * 1024; // 70 MB in bytes
+                if (file.size > maxSize) {
+                    showError('File size exceeds 70 MB limit. Please choose a smaller file.');
+                    fileInput.value = '';
+                    selectedFile = null;
+                    disableButtons();
+                    return;
+                }
+
+                // Check file type
+                if (!file.name.toLowerCase().endsWith('.pdf')) {
+                    showError('Please select a PDF file.');
+                    fileInput.value = '';
+                    selectedFile = null;
+                    disableButtons();
+                    return;
+                }
+
+                selectedFile = file;
+                fileName.textContent = file.name;
+                enableButtons();
+                hideError();
+                hideResults();
+            }
+        });
+
+        // Test Extract
+        testBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            await processFile('/test/extract', 'test');
+        });
+
+        // Generate Summary
+        summaryBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            await processFile('/upload/summary', 'summary');
+        });
+
+        // Generate Questions
+        questionsBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            await processFile('/upload/questions', 'questions');
+        });
+
+        // Process file with API
+        async function processFile(endpoint, type) {
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            // Add language parameter
+            const selectedLanguage = languageSelect.value;
+            formData.append('language', selectedLanguage);
+            
+            // Add number of questions parameter if generating questions
+            if (type === 'questions') {
+                const numQuestions = parseInt(numQuestionsInput.value) || 10;
+                if (numQuestions < 1 || numQuestions > 50) {
+                    showError('Number of questions must be between 1 and 50');
+                    return;
+                }
+                formData.append('num_questions', numQuestions);
+            }
+
+            showLoading();
+            hideError();
+            hideResults();
+            disableButtons();
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(data.detail || 'Failed to process PDF');
+                }
+
+                hideLoading();
+                displayResults(data, type);
+                enableButtons();
+            } catch (error) {
+                hideLoading();
+                showError(error.message || 'An error occurred while processing your file.');
+                enableButtons();
+            }
+        }
+
+        // Display results
+        function displayResults(data, type) {
+            // Debug info section
+            const debugInfo = data.extracted_chars ? `
+                <div class="debug-info">
+                    <p><strong>📊 Extracted:</strong> ${data.extracted_chars.toLocaleString()} characters from PDF</p>
+                    <p><strong>🌍 Language:</strong> ${data.language}</p>
+                    <details style="margin-top: 10px;">
+                        <summary style="cursor: pointer; color: #667eea; font-weight: 600;">📄 View extracted text preview</summary>
+                        <div style="margin-top: 10px; padding: 10px; background: #f0f2ff; border-radius: 5px; font-size: 0.9em; max-height: 200px; overflow-y: auto; white-space: pre-wrap;">
+                            ${data.text_preview || 'No preview available'}
+                        </div>
+                    </details>
+                </div>
+            ` : '';
+
+            if (type === 'test') {
+                resultsTitle.textContent = '🔍 PDF Text Extraction Test';
+                resultsContent.innerHTML = `
+                    <div class="result-item">
+                        <h3>Document: ${data.filename}</h3>
+                        <div class="debug-info" style="background: #fff3cd; border-color: #ffc107;">
+                            <p><strong>📊 Total Characters:</strong> ${data.total_characters?.toLocaleString() || 0}</p>
+                            <p><strong>📝 Total Words:</strong> ${data.total_words?.toLocaleString() || 0}</p>
+                            <p><strong>✅ Status:</strong> ${data.total_characters > 0 ? 'Text extracted successfully!' : '❌ NO TEXT FOUND!'}</p>
+                        </div>
+                        <details open style="margin-top: 15px;">
+                            <summary style="cursor: pointer; font-weight: 600; font-size: 1.1em; color: #667eea;">📄 First 500 characters:</summary>
+                            <div style="margin-top: 10px; padding: 15px; background: #f8f9ff; border-radius: 5px; font-size: 0.95em; white-space: pre-wrap; max-height: 300px; overflow-y: auto; border: 2px solid #667eea;">
+                                ${data.first_500_chars || 'No text'}
+                            </div>
+                        </details>
+                        <details style="margin-top: 15px;">
+                            <summary style="cursor: pointer; font-weight: 600; font-size: 1.1em; color: #667eea;">📄 Last 500 characters:</summary>
+                            <div style="margin-top: 10px; padding: 15px; background: #f8f9ff; border-radius: 5px; font-size: 0.95em; white-space: pre-wrap; max-height: 300px; overflow-y: auto; border: 2px solid #667eea;">
+                                ${data.last_500_chars || 'No text'}
+                            </div>
+                        </details>
+                    </div>
+                `;
+            } else if (type === 'summary') {
+                resultsTitle.textContent = '📝 Summary';
+                resultsContent.innerHTML = `
+                    <div class="result-item">
+                        <h3>Document: ${data.filename}</h3>
+                        ${debugInfo}
+                        <div class="summary-text">${data.summary}</div>
+                    </div>
+                `;
+            } else if (type === 'questions') {
+                resultsTitle.textContent = '❓ Study Questions';
+                const questionsList = data.questions.map((q, index) => 
+                    `<li><span class="question-number">Q${index + 1}:</span> ${q}</li>`
+                ).join('');
+                resultsContent.innerHTML = `
+                    <div class="result-item">
+                        <h3>Document: ${data.filename}</h3>
+                        ${debugInfo}
+                        <p style="margin-bottom: 15px;"><strong>Generated ${data.questions.length} questions</strong></p>
+                        <ol class="questions-list">${questionsList}</ol>
+                    </div>
+                `;
+            }
+            results.classList.remove('hidden');
+        }
+
+        // UI Helper Functions
+        function showLoading() {
+            loading.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loading.classList.add('hidden');
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+
+        function hideError() {
+            errorDiv.classList.add('hidden');
+        }
+
+        function hideResults() {
+            results.classList.add('hidden');
+        }
+
+        function enableButtons() {
+            testBtn.disabled = false;
+            summaryBtn.disabled = false;
+            questionsBtn.disabled = false;
+        }
+
+        function disableButtons() {
+            testBtn.disabled = true;
+            summaryBtn.disabled = true;
+            questionsBtn.disabled = true;
+        }
+
+        // Close buttons
+        closeResults.addEventListener('click', hideResults);
+        closeError.addEventListener('click', hideError);
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,22 @@
+# FastAPI framework for building APIs
+fastapi==0.104.1
+
+# ASGI server for running FastAPI
+uvicorn[standard]==0.24.0
+
+# PDF text extraction libraries
+pdfplumber==0.10.3
+PyMuPDF==1.26.7
+
+# OpenAI API client
+openai==1.54.0
+
+# Environment variables management
+python-dotenv==1.0.0
+
+# Python multipart for file uploads
+python-multipart==0.0.6
+
+# Jinja2 templating engine
+Jinja2==3.1.2
+
